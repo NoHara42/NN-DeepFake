@@ -14,8 +14,10 @@ class OurDataset(Dataset):
     datasetPath = '../20bn-jester-v1'
     transform = transforms.Compose(
         [
-            transforms.CenterCrop(256),
+            transforms.CenterCrop(64),
             transforms.ToTensor(),
+            transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
+
         ]
     )
     def __init__(self):

@@ -22,7 +22,7 @@ batch_size = 64
 image_size = 64
 
 # hier 3 für RGB, in diesem Falle 1 da in MNIST nur Grau Bilder sind
-channels_img = 1
+channels_img = 3
 
 #length of noise vector, kann varieren
 channels_noise = 256
@@ -40,7 +40,7 @@ my_transforms = transforms.Compose([
     #konvertiert Bild mit Koordinaten in einen FloatTensor ( siehe https://pytorch.org/docs/stable/torchvision/transforms.html#transforms-on-torch-tensor)
     transforms.ToTensor(),
     # Normailzes the tensor but does not mutate it
-    transforms.Normalize((0.5,), (0.5,)),
+    transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
 
 #Dataset wird geladen
