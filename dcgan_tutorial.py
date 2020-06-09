@@ -7,7 +7,7 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader  # Dataset mangement and for mini batches
 from torch.utils.tensorboard import SummaryWriter # für die Visualization
 from models import Generator, Discriminator # die definierten Modelle
-
+import importData
 
 
 #Hyperparameters
@@ -44,7 +44,8 @@ my_transforms = transforms.Compose([
     ])
 
 #Dataset wird geladen
-dataset = datasets.MNIST(root='dataset/', train = True, transform = my_transforms, download = True)
+# dataset = datasets.MNIST(root='dataset/', train = True, transform = my_transforms, download = True)
+dataset = importData.OurDataset()
 dataloader = DataLoader(dataset,batch_size = batch_size, shuffle = True)
 
 #Wenn GPU vorhanden die Cuda aktiviert hat, wird diese als Gerät benutzt sonst die CPU
