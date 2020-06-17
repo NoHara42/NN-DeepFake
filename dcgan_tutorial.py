@@ -7,7 +7,14 @@ import torchvision.transforms as transforms
 from torch.utils.data import DataLoader  # Dataset mangement and for mini batches
 from torch.utils.tensorboard import SummaryWriter # für die Visualization
 from models import Generator, Discriminator # die definierten Modelle
+import matplotlib.pyplot as plt
 import importData
+import numpy as np
+import matplotlib.animation as animation
+from IPython.display import HTML
+import torchvision.utils as vutils
+import time
+
 
 
 #Hyperparameters
@@ -34,6 +41,9 @@ num_epochs = 10
 g_features = 16
 d_features = 16
 
+#Wenn GPU vorhanden die Cuda aktiviert hat, wird diese als Gerät benutzt sonst die CPU
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+
 #Compose ist zum Aneinaderreihen von Bild Veränderungen
 my_transforms = transforms.Compose([
     transforms.Resize(image_size),
@@ -47,9 +57,6 @@ my_transforms = transforms.Compose([
 # dataset = datasets.MNIST(root='dataset/', train = True, transform = my_transforms, download = True)
 dataset = importData.OurDataset()
 dataloader = DataLoader(dataset,batch_size = batch_size, shuffle = True)
-
-#Wenn GPU vorhanden die Cuda aktiviert hat, wird diese als Gerät benutzt sonst die CPU
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 #Create Discriminator and Generator
 netD = Discriminator(channels_img, d_features).to(device)
@@ -80,8 +87,14 @@ fake_label = 0
 fixed_noise  = torch.randn(64, channels_noise, 1, 1,).to(device)
 
 #erstellt die dirs für tensorboard das dann mit "tensorboard --logdir runs" aufgerufen werden kann
-writer_real = SummaryWriter(f'runs/DCGAN_MNIST/test_real')
-writer_fake = SummaryWriter(f'runs/DCGAN_MNIST/test_fake')
+writer_real = SummaryWriter(f'runs/DCGAN_JESTER/test_real')
+writer_fake = SummaryWriter(f'runs/DCGAN_JESTER/test_fake')
+
+#lists for plotting
+img_list = []
+G_losses = []
+D_losses = []
+
 print("Starting training....")
 
 #hier bin ich auch noch nicht komplett durchgestiegen
@@ -132,10 +145,60 @@ for epoch in range(num_epochs):
             print(f'Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(dataloader)} \
                 Loss D: {lossD:.4f}, Loss G: {lossG:.4f} D(x): {D_x:.4f} ')
 
+            # Save Losses for plotting later
+            G_losses.append(lossG.item())
+            D_losses.append(lossD.item())
+
             with torch.no_grad():
-                fakeImages = netG(fixed_noise)
+                fakeImages = netG(fixed_noise).detach().cpu()
 
                 img_grid_real = torchvision.utils.make_grid(data[:32] , normalize = True)
                 img_grid_fake = torchvision.utils.make_grid(fakeImages[:32] , normalize = True)
                 writer_real.add_image('MNIST Real Images', img_grid_real)
                 writer_fake.add_image('MNIST Fake Images', img_grid_fake)
+
+                #imgs for plots
+                img_list.append(torchvision.utils.make_grid(fakeImages, padding=2, normalize=True))
+
+
+
+#plot of D and G losses
+plt.figure(figsize=(10,5))
+plt.title("Generator and Discriminator Loss During Training")
+plt.plot(G_losses,label="G")
+plt.plot(D_losses,label="D")
+plt.xlabel("iterations")
+plt.ylabel("Loss")
+plt.legend()
+plt.show()
+
+#Animation
+'''
+fig = plt.figure(figsize=(8,8))
+plt.axis("off")
+ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
+ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
+
+HTML(ani.to_jshtml())
+'''
+
+# Grab a batch of real images from the dataloader
+real_batch = next(iter(dataloader))
+
+# Plot the real images
+plt.figure(figsize=(15,15))
+plt.subplot(1,2,1)
+plt.axis("off")
+plt.title("Real Images")
+plt.imshow(np.transpose(torchvision.utils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
+plt.show()
+
+# Plot the fake images from the last epoch
+plt.figure(figsize=(15,15))
+plt.subplot(1,2,2)
+plt.axis("off")
+plt.title("Fake Images")
+plt.imshow(np.transpose(img_list[-1],(1,2,0)))
+plt.show()
+
+
