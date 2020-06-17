@@ -14,7 +14,15 @@ import matplotlib.animation as animation
 from IPython.display import HTML
 import torchvision.utils as vutils
 import time
+from datetime import datetime, timedelta
 
+#for measuring time
+start = time.time()
+def formatSeconds(sekunden):
+    sec = timedelta(seconds=int(sekunden))
+    d = datetime(1,1,1) + sec
+    #print("DAYS:HOURS:MIN:SEC")
+    print("%d:%d:%d:%d" % (d.day-1, d.hour, d.minute, d.second))
 
 
 #Hyperparameters
@@ -35,7 +43,7 @@ channels_img = 3
 channels_noise = 256
 
 #Anzahl der Durchläufe
-num_epochs = 10
+num_epochs = 30
 
 #Anzahl der Features die aufgenommen werden, je mehr desto besser, dauert dann aber auch länger
 g_features = 16
@@ -142,8 +150,15 @@ for epoch in range(num_epochs):
 
         #das ist einfach nur Print um zu sehen wie weit man ist und um Bilder für tensorboard zu generieren
         if batch_idx % 100 == 0:
+
             print(f'Epoch [{epoch}/{num_epochs}] Batch {batch_idx}/{len(dataloader)} \
                 Loss D: {lossD:.4f}, Loss G: {lossG:.4f} D(x): {D_x:.4f} ')
+
+            #for time measuring
+            timeTillNow = time.time()
+            elapsedTime = timeTillNow - start
+            formatSeconds(elapsedTime)
+           
 
             # Save Losses for plotting later
             G_losses.append(lossG.item())
@@ -202,3 +217,8 @@ plt.imshow(np.transpose(img_list[-1],(1,2,0)))
 plt.show()
 
 
+#for time measuring
+end = time.time()
+totalTime = end() - start()
+print("Total Runtime: ")
+formatSeconds(totalTime)
