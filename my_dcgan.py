@@ -32,7 +32,6 @@ torch.manual_seed(manualSeed)
 
 # Batch size
 batch_size = parsed.batch_size
-print(batch_size)
 
 # image size
 image_size = 64
@@ -51,7 +50,6 @@ discriminator_features = 64
 
 # Number of training epochs
 num_epochs = parsed.epochs
-print(num_epochs)
 
 # learning rate, defined in paper , https://towardsdatascience.com/understanding-learning-rates-and-how-it-improves-performance-in-deep-learning-d0d4059c1c10 for what it is
 lr = 0.0002
