@@ -1,6 +1,6 @@
 from __future__ import print_function
 #%matplotlib inline
-#import argparse
+from argparse import ArgumentParser
 import random
 import torch
 import torch.nn as nn
@@ -16,6 +16,13 @@ from my_models import Generator, Discriminator
 from torch.utils.data import DataLoader  # Dataset mangement and for mini batches
 import importData # for our own dataset
 
+#Parser for cool parser feeling
+parser = ArgumentParser()
+parser.add_argument("--epochs",type=int, default=10, help="number of training epochs")
+parser.add_argument("--batch_size",type=int, default=64, help="batch_size")
+
+parsed = parser.parse_args()
+
 # Set torch seed and numpy seed manually for reproducibility and for results to be reproducible between CPU and GPU executions
 manualSeed = 999
 #manualSeed = random.randint(1, 10000) # for new results
@@ -24,7 +31,8 @@ manualSeed = 999
 torch.manual_seed(manualSeed)
 
 # Batch size
-batch_size = 128
+batch_size = parsed.batch_size
+print(batch_size)
 
 # image size
 image_size = 64
@@ -42,7 +50,8 @@ generator_features = 64
 discriminator_features = 64
 
 # Number of training epochs
-num_epochs = 10
+num_epochs = parsed.epochs
+print(num_epochs)
 
 # learning rate, defined in paper , https://towardsdatascience.com/understanding-learning-rates-and-how-it-improves-performance-in-deep-learning-d0d4059c1c10 for what it is
 lr = 0.0002
