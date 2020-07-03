@@ -15,11 +15,15 @@ from IPython.display import HTML
 from my_models import Generator, Discriminator
 from torch.utils.data import DataLoader  # Dataset mangement and for mini batches
 import importData # for our own dataset
+import import_lol_dataset
+
+
 
 #Parser for cool parser feeling
 parser = ArgumentParser()
 parser.add_argument("--epochs",type=int, default=10, help="number of training epochs")
 parser.add_argument("--batch_size",type=int, default=64, help="batch_size")
+parser.add_argument("--dataset", type=str, default = "jester", help = "either jester or lol")
 
 parsed = parser.parse_args()
 
@@ -60,10 +64,19 @@ beta1 = 0.5
 # Number of GPUs
 number_gpu = 1
 
-#loading of dataset
-dataset = importData.OurDataset()
-dataloader = DataLoader(dataset,batch_size = batch_size, shuffle = True)
+#which dataset is gonna be used
+dataset_name = parsed.dataset
 
+#loading of dataset
+if dataset_name == "jester":
+    dataset = importData.OurDataset()
+    dataloader = DataLoader(dataset, batch_size = batch_size, shuffle = True)
+elif dataset_name == "lol":
+    dataset = import_lol_dataset.OurDataset()
+    dataloader = DataLoader(dataset ,batch_size = batch_size, shuffle = True)
+else: 
+    print("Please choose either the jester or lol dataset")
+    quit()
 # Decide which device we want to run on
 device = torch.device("cuda:0" if (torch.cuda.is_available() and number_gpu > 0) else "cpu")
 
@@ -213,7 +226,7 @@ for epoch in range(num_epochs):
 
 #Setting up wrtiters to save animations
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=3, metadata=dict(artist='Me'), bitrate=1800)
+writer = Writer(fps=4, metadata=dict(artist='Me'), bitrate=1800)
 
 #Animation to see the progress of generated images
 matplotlib.rcParams['animation.embed_limit'] = 2**128
