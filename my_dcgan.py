@@ -2,11 +2,13 @@ from __future__ import print_function
 #%matplotlib inline
 from argparse import ArgumentParser
 import random
+import os
 import torch
 import torch.nn as nn
 import torch.optim as optim 
 import torch.utils.data
 import torchvision.utils as vutils
+import torch.backends.cudnn as cudnn
 import numpy as np
 import matplotlib
 import matplotlib.pyplot as plt
@@ -16,7 +18,17 @@ from my_models import Generator, Discriminator
 from torch.utils.data import DataLoader  # Dataset mangement and for mini batches
 import importData # for our own dataset
 import import_lol_dataset
+import time
+from datetime import datetime, timedelta
+import random
 
+#for measuring time
+start = time.time()
+def formatSeconds(sekunden):
+    sec = timedelta(seconds=int(sekunden))
+    d = datetime(1,1,1) + sec
+    #print("DAYS:HOURS:MIN:SEC")
+    print("%d:%d:%d:%d" % (d.day-1, d.hour, d.minute, d.second))
 
 
 #Parser for cool parser feeling
@@ -24,15 +36,25 @@ parser = ArgumentParser()
 parser.add_argument("--epochs",type=int, default=10, help="number of training epochs")
 parser.add_argument("--batch_size",type=int, default=64, help="batch_size")
 parser.add_argument("--dataset", type=str, default = "jester", help = "either jester or lol")
+parser.add_argument('--netG', default='', help="path to netG (to continue training)")
+parser.add_argument('--netD', default='', help="path to netD (to continue training)")
+parser.add_argument('--outf', default='output', help='folder to save model checkpoints')
 
 parsed = parser.parse_args()
 
-# Set torch seed and numpy seed manually for reproducibility and for results to be reproducible between CPU and GPU executions
-manualSeed = 999
-#manualSeed = random.randint(1, 10000) # for new results
-#random.seed(manualSeed)
+try:
+    os.makedirs(parsed.outf)
+except OSError:
+    pass
 
+# Set torch seed manually for reproducibility and for results to be reproducible between CPU and GPU executions
+manualSeed = 42
+#manualSeed = random.randint(1, 10000) # for new results
+random.seed(manualSeed)
 torch.manual_seed(manualSeed)
+
+#to improve cuda speed
+cudnn.benchmark = True
 
 # Batch size
 batch_size = parsed.batch_size
@@ -40,7 +62,7 @@ batch_size = parsed.batch_size
 # image size
 image_size = 64
 
-# hier 3 für RGB, in diesem Falle 1 da in MNIST nur Grau Bilder sind
+#3 for RGB
 image_channels = 3
 
 # size of generator input
@@ -77,6 +99,7 @@ elif dataset_name == "lol":
 else: 
     print("Please choose either the jester or lol dataset")
     quit()
+
 # Decide which device we want to run on
 device = torch.device("cuda:0" if (torch.cuda.is_available() and number_gpu > 0) else "cpu")
 
@@ -93,18 +116,32 @@ def weights_init(m):
 # Create the generator
 netG = Generator(number_gpu, image_channels, generator_in, generator_features).to(device)
 
+
 # Apply the weights_init function to randomly initialize all weights
 netG.apply(weights_init)
 
+#load checkpoint for G if one is available
+if parsed.netG != '':
+    netG.load_state_dict(torch.load(parsed.netG))
+    print("Checkpoint for G has been loaded")
+#print(netG)
+
 # Create the Discriminator
 netD = Discriminator(number_gpu, image_channels, discriminator_features).to(device)
+
 
 # Apply the weights_init function to randomly initialize all weights
 #  to mean=0, stdev=0.2.
 netD.apply(weights_init)
 
+#load checkpoint for D if one is available
+if parsed.netD != '':
+    netD.load_state_dict(torch.load(parsed.netD))
+    print("Checkpoint for D has been loaded")
+#print(netD)
+
 # Initialize BCELoss function
-criterion = nn.BCELoss()
+loss_function = nn.BCELoss()
 
 # Create batch of  vectors for visualization
 fixed_noise = torch.randn(64, generator_in, 1, 1, device=device)
@@ -118,7 +155,6 @@ optimizerD = optim.Adam(netD.parameters(), lr=lr, betas=(beta1, 0.999))
 optimizerG = optim.Adam(netG.parameters(), lr=lr, betas=(beta1, 0.999))
 
 
-
 # Training Loop
 
 # Lists to keep track of progress
@@ -127,7 +163,7 @@ G_losses = []
 D_losses = []
 iters = 0
 
-print("Starting Training Loop...")
+print("Starting training")
 # For each epoch
 for epoch in range(num_epochs):
     # For each batch in the dataloader
@@ -142,25 +178,29 @@ for epoch in range(num_epochs):
         #Set gradient to zero
         netD.zero_grad()
 
-        #Format batch of real images
-        real_cpu = data[0].to(device)
-        b_size = real_cpu.size(0)
-        label = torch.full((b_size,), real_label, device=device)
+        #Transfer data to CPU/GPU
+        real_data = data[0].to(device)
+        batch_size = real_data.size(0)
+
+        label = torch.full((batch_size,), real_label, device=device)
 
         #Forward batch to D
-        output = netD(real_cpu).view(-1)
+        output = netD(real_data).view(-1)
 
         #Calculate loss on real images batch
-        errD_real = criterion(output, label)
+        errD_real = loss_function(output, label)
 
         #Calculate gradients for D 
         errD_real.backward()
+
         D_x = output.mean().item()
+
 
         #2.Training with fake images
 
         # Generate batch of input vectors
-        noise = torch.randn(b_size, generator_in, 1, 1, device=device)
+        #Sampled from a normal distribution
+        noise = torch.randn(batch_size, generator_in, 1, 1, device=device)
 
         # Generate fake image batch with G
         fake_images = netG(noise)
@@ -170,7 +210,7 @@ for epoch in range(num_epochs):
         output = netD(fake_images.detach()).view(-1)
 
         # Calculate D's loss on fake batch
-        errD_fake = criterion(output, label)
+        errD_fake = loss_function(output, label)
 
         # Calculate the gradients for this batch
         errD_fake.backward()
@@ -190,6 +230,7 @@ for epoch in range(num_epochs):
         #Set gradient to zero
         netG.zero_grad()
 
+
         #Set labels to real to confuse D
         label.fill_(real_label)
 
@@ -197,36 +238,62 @@ for epoch in range(num_epochs):
         output = netD(fake_images).view(-1)
 
         # Calculate G's loss
-        errG = criterion(output, label)
+        errG = loss_function(output, label)
 
         # Calculate gradients for G
         errG.backward()
 
-        D_G_z2 = output.mean().item()
+        D_G_z = output.mean().item()
         # Update G
         optimizerG.step()
 
         # Output training stats
-        if i % 50 == 0:
-            print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                  % (epoch+1, num_epochs, i, len(dataloader),
-                     errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
+        if dataset_name == 'lol' :
+            print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f'
+                    % (epoch+1, num_epochs, i +1, len(dataloader),
+                        errD.item(), errG.item(), D_x, D_G_z))
+
+            #for time measuring
+            timeTillNow = time.time()
+            elapsedTime = timeTillNow - start
+            formatSeconds(elapsedTime)
+
+        else:
+            if i % 50 == 0:
+                print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f'
+                    % (epoch+1, num_epochs, i, len(dataloader),
+                        errD.item(), errG.item(), D_x, D_G_z))
+
+                #for time measuring
+                timeTillNow = time.time()
+                elapsedTime = timeTillNow - start
+                formatSeconds(elapsedTime)
 
         # Save Losses for plotting later
         G_losses.append(errG.item())
         D_losses.append(errD.item())
 
         # Check how the generator is doing by saving G's output on fixed_noise
-        if (iters % 500 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
-            with torch.no_grad():
-                fake = netG(fixed_noise).detach().cpu()
-            img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
+        if dataset_name == 'lol' :
+            if (iters % 100 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
+                with torch.no_grad():
+                    fake = netG(fixed_noise).detach().cpu()
+                img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
+        else:
+            if (iters % 500 == 0) or ((epoch == num_epochs-1) and (i == len(dataloader)-1)):
+                with torch.no_grad():
+                    fake = netG(fixed_noise).detach().cpu()
+                img_list.append(vutils.make_grid(fake, padding=2, normalize=True))
 
         iters += 1
 
+#save checkpoints for G and D
+torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (parsed.outf, num_epochs))
+torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (parsed.outf, num_epochs))
+
 #Setting up wrtiters to save animations
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=4, metadata=dict(artist='Me'), bitrate=1800)
+writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
 
 #Animation to see the progress of generated images
 matplotlib.rcParams['animation.embed_limit'] = 2**128
@@ -234,8 +301,10 @@ fig = plt.figure(figsize=(8,8))
 plt.axis("off")
 ims = [[plt.imshow(np.transpose(i,(1,2,0)), animated=True)] for i in img_list]
 ani = animation.ArtistAnimation(fig, ims, interval=1000, repeat_delay=1000, blit=True)
-ani.save('output.mp4', writer = writer)
-plt.show
+animation = "animation_after_" + str(num_epochs) + "_epochs.mp4"
+save_animation = os.path.join(parsed.outf, animation)
+ani.save(save_animation, writer = writer)
+plt.close()
 HTML(ani.to_jshtml())
 
 #Plot for G and D Loss
@@ -246,24 +315,42 @@ plt.plot(D_losses,label="D")
 plt.xlabel("iterations")
 plt.ylabel("Loss")
 plt.legend()
-plt.show()
+G_and_D_loss = "Loss_after_" + str(num_epochs) + "_epochs.png"
+save_G_and_D_loss = os.path.join(parsed.outf, G_and_D_loss)
+plt.savefig(save_G_and_D_loss)
+plt.close()
 
-
+"""
 # Grab a batch of real images from the dataloader
 real_batch = next(iter(dataloader))
 
+
 # Plot the real images
-plt.figure(figsize=(15,15))
-plt.subplot(1,2,1)
+plt.figure(figsize=(20,20))
+plt.subplot(1,1,1)
 plt.axis("off")
 plt.title("Real Images")
 plt.imshow(np.transpose(vutils.make_grid(real_batch[0].to(device)[:64], padding=5, normalize=True).cpu(),(1,2,0)))
 plt.show()
+"""
+
 
 # Plot the fake images from the last epoch
-plt.subplot(1,2,2)
+plt.figure(figsize=(20,20))
+plt.subplot(1,1,1)
 plt.axis("off")
 plt.title("Fake Images")
 plt.imshow(np.transpose(img_list[-1],(1,2,0)))
-plt.show()
+images_last_epoch = "fakeImages_after_" + str(num_epochs) + "_epochs.png"
+save_Images = os.path.join(parsed.outf, images_last_epoch)
+plt.savefig(save_Images)
+plt.close()
 
+
+print(iters)
+
+#for time measuring
+end = time.time()
+totalTime = end - start
+print("Total Runtime: ")
+formatSeconds(totalTime)
