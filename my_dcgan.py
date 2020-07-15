@@ -36,9 +36,11 @@ parser = ArgumentParser()
 parser.add_argument("--epochs",type=int, default=10, help="number of training epochs")
 parser.add_argument("--batch_size",type=int, default=64, help="batch_size")
 parser.add_argument("--dataset", type=str, default = "jester", help = "either jester or lol")
-parser.add_argument('--netG', default='', help="path to netG (to continue training)")
-parser.add_argument('--netD', default='', help="path to netD (to continue training)")
+parser.add_argument('--netG', default='', help="path to netG checkpoint (to continue training)")
+parser.add_argument('--netD', default='', help="path to netD checkpoint (to continue training)")
 parser.add_argument('--outf', default='output', help='folder to save model checkpoints')
+parser.add_argument('--saveLoss', default='', help='folder containing G and D loss list to continue plotting')
+parser.add_argument('--save',type = bool, default= False, help='if saving the loosses and checkpoints is wanted')
 
 parsed = parser.parse_args()
 
@@ -78,7 +80,9 @@ discriminator_features = 64
 num_epochs = parsed.epochs
 
 # learning rate, defined in paper , https://towardsdatascience.com/understanding-learning-rates-and-how-it-improves-performance-in-deep-learning-d0d4059c1c10 for what it is
-lr = 0.0002
+#lr = 0.0002
+#lr test for lol dataset
+lr = 0.0003
 
 # Beta1 hyperparam for Adam optimizers
 beta1 = 0.5
@@ -182,13 +186,19 @@ for epoch in range(num_epochs):
         real_data = data[0].to(device)
         batch_size = real_data.size(0)
 
+        #Label smoothing test
+        label_smoothing_real = random.uniform(0.7, 1.2)
+
+        #label = torch.full((batch_size,), label_smoothing_real, device=device)
         label = torch.full((batch_size,), real_label, device=device)
 
         #Forward batch to D
         output = netD(real_data).view(-1)
 
+
         #Calculate loss on real images batch
         errD_real = loss_function(output, label)
+        
 
         #Calculate gradients for D 
         errD_real.backward()
@@ -204,21 +214,25 @@ for epoch in range(num_epochs):
 
         # Generate fake image batch with G
         fake_images = netG(noise)
-        label.fill_(fake_label)
+
+        #label smoothing 
+        label_smoothing_fake = random.uniform(0.0, 0.3)
+
+        label.fill_(label_smoothing_fake)
 
         #Label all fake images with D
         output = netD(fake_images.detach()).view(-1)
 
         # Calculate D's loss on fake batch
         errD_fake = loss_function(output, label)
-
+        
         # Calculate the gradients for this batch
         errD_fake.backward()
         D_G_z1 = output.mean().item()
 
         # Add the gradients from the real and fake batches
         errD = errD_real + errD_fake
-
+        print(errD)
         # Update D
         optimizerD.step()
 
@@ -287,13 +301,31 @@ for epoch in range(num_epochs):
 
         iters += 1
 
-#save checkpoints for G and D
-torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (parsed.outf, num_epochs))
-torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (parsed.outf, num_epochs))
+
+if parsed.netD != '':
+    num_epochs = int(parsed.netD.split("_")[2].split(".")[0]) + num_epochs
+
+if parsed.saveLoss != "":
+    G_losses_last_run = list(np.load(os.path.join(parsed.saveLoss, "G_losses.npy")))
+    D_losses_last_run = list(np.load(os.path.join(parsed.saveLoss, "D_losses.npy")))
+
+    D_losses = D_losses_last_run + D_losses
+    G_losses = G_losses_last_run + G_losses
+
+#save checkpoints for G and D, as well as the Loss lists
+if parsed.save:
+    torch.save(netG.state_dict(), '%s/netG_epoch_%d.pth' % (parsed.outf, num_epochs))
+    torch.save(netD.state_dict(), '%s/netD_epoch_%d.pth' % (parsed.outf, num_epochs))
+
+    save_D_loss = os.path.join(parsed.outf, "D_losses.npy")
+    save_G_loss = os.path.join(parsed.outf, "G_losses.npy")
+
+    np.save(save_G_loss, np.array(G_losses))
+    np.save(save_D_loss, np.array(D_losses))
 
 #Setting up wrtiters to save animations
 Writer = animation.writers['ffmpeg']
-writer = Writer(fps=15, metadata=dict(artist='Me'), bitrate=1800)
+writer = Writer(fps=1, metadata=dict(artist='Me'), bitrate=1800)
 
 #Animation to see the progress of generated images
 matplotlib.rcParams['animation.embed_limit'] = 2**128
